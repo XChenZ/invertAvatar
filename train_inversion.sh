@@ -1,0 +1,61 @@
+################E4E training############################################
+python encoder_inversion/train.py \
+--outdir=training-runs/encoder_inversion/e4e \
+--cfg=ffhq \
+--data /data/zhaoxiaochen/Dataset/FFHQ/images512x512 \
+--rdata /data/zhaoxiaochen/Dataset/FFHQ/orthRender256x256_face \
+--gpus=8 \
+--batch=32 \
+--mbstd-group=4 \
+--gamma=1 \
+--snap=10 \
+--gen_pose_cond=1 \
+--model_version v20 \
+--configs_path=encoder_inversion/config/train_e4e_real.yaml \
+--gen_lms_cond 0 \
+--training_state e4e \
+--gen_mask_cond 0
+
+################Few-shot Training###################################
+
+python encoder_inversion/train.py \
+--outdir=training-runs/encoder_inversion/few-shot \
+--cfg=ffhq \
+--data /data/zhaoxiaochen/Dataset/VFHQ/dataset/images512x512 \
+--rdata /data/zhaoxiaochen/Dataset/VFHQ/dataset/orthRender256x256_face_eye \
+--dataset_class_name encoder_inversion.dataset_video.VideoFolderDataset \
+--gpus=8 \
+--batch=8 \
+--mbstd-group=1 \
+--gamma=1 \
+--tick=1 \
+--snap=4 \
+--gen_pose_cond=1 \
+--model_version v20 \
+--configs_path=encoder_inversion/config/train_textureUnet_video.yaml \
+--gen_lms_cond 0 \
+--gen_mask_cond 1 \
+--gen_uv_cond 1 \
+--training_state fewshot \
+--resume training-runs/encoder_inversion/e4e/path-to-your-pkl.pkl
+
+
+################Improved One-shot Training###################################
+python encoder_inversion/train.py \
+--outdir=training-runs/encoder_inversion/new-one-shot \
+--cfg=ffhq \
+--data /data/zhaoxiaochen/Dataset/FFHQ/images512x512 \
+--rdata /data/zhaoxiaochen/Dataset/FFHQ/orthRender256x256_face_eye \
+--gpus=8 \
+--batch=16 \
+--mbstd-group=2 \
+--gamma=8 \
+--snap=10 \
+--gen_pose_cond=1 \
+--model_version v20 \
+--configs_path=encoder_inversion/config/train_textureUnet_real.yaml \
+--gen_lms_cond 0 \
+--gen_mask_cond 0 \
+--gen_uv_cond 1 \
+--training_state oneshot \
+--resume training-runs/encoder_inversion/e4e/path-to-your-pkl.pkl

@@ -1,0 +1,56 @@
+I_kwargs:
+    class_name: encoder_inversion.models.uvnet.inversionNet
+    encoding_texture: True
+    encoding_triplane: True
+    use_gru: True
+    use_msfeat: True
+    path_kwargs:
+        path_generator: training-runs/v20_pgtraining_wolmsCond/00005-ffhq-images512x512-gpus6-batch24-gamma8/network-snapshot-001362.pkl
+        path_irse50: pretrained_models/model_ir_se50.pth
+        path_triplanenet: pretrained_models/triplanenet_final.pth
+
+#D_kwargs:
+#    # class_name: inversion_w.models.multiview_discriminator.MultiviewDiscriminator
+#    class_name: training.dual_discriminator.DualDiscriminator
+#    block_kwargs:
+#        freeze_layers: 0
+#    epilogue_kwargs:
+#        mbstd_group_size: 4
+#    channel_base: 32768
+#    channel_max: 512
+#    num_fp16_res: 4
+#    conv_clamp: 256
+
+loss_kwargs:
+    class_name: encoder_inversion.video_loss.WLoss
+    r1_gamma: 1
+    loss_weight:
+        l1: 1.0
+        lpips: 1.0
+        mouth: 0.
+        raw_l1: 1.0
+        tri: 0.001
+        lr_lpips: 1.0
+        id: 0.
+        adv: 0.1
+    loss_path:
+        path_ir_se50: pretrained_models/model_ir_se50.pth
+    multiT_training: False
+
+
+G_opt_kwargs:
+    class_name: torch.optim.Adam
+    module: unet_encoder.triplane_unet #.texture_unet #unet_encoder
+    betas: [0.5, 0.999]
+    eps: 1.0e-08
+    lr: 0.000025
+
+D_opt_kwargs: 
+    class_name: torch.optim.Adam
+    betas: [0, 0.99]
+    eps: 1.0e-08
+    lr: 0.001
+
+training_set_kwargs:
+    frm_per_vid: 4
+

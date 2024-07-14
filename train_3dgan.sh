@@ -1,0 +1,15 @@
+python train_avatar_texture.py \
+--outdir training-runs/next3d++ \
+--cfg ffhq \
+--data /data/zhaoxiaochen/Dataset/FFHQ/images512x512 \
+--rdata /data/zhaoxiaochen/Dataset/FFHQ/orthRender256x256_face \
+--gpus 8 \
+--batch 32 \
+--mbstd-group 4 \
+--gamma 8 \
+--model_version v20 \
+--gen_pose_cond 1 \
+--neural_rendering_resolution_initial 64 \
+--neural_rendering_resolution_final 128 \
+--metrics fid50k_full \
+--resume pretrained_models/eg3d/ffhqrebalanced512-128.pkl

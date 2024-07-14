@@ -1,0 +1,55 @@
+I_kwargs:
+    class_name: encoder_inversion.models.e4e.e4e
+    path_kwargs:
+#        path_generator: training-runs/v20_pgtraining_wolmsCond/00005-ffhq-images512x512-gpus6-batch24-gamma8/network-snapshot-001362.pkl
+        path_generator: pretrained_models/Animatable_3dgan_512.pkl
+        path_irse50: pretrained_models/model_ir_se50.pth
+
+#D_kwargs:
+#    # class_name: inversion_w.models.multiview_discriminator.MultiviewDiscriminator
+#    class_name: training.dual_discriminator.DualDiscriminator
+#    block_kwargs:
+#        freeze_layers: 0
+#    epilogue_kwargs:
+#        mbstd_group_size: 4
+#    channel_base: 32768
+#    channel_max: 512
+#    num_fp16_res: 4
+#    conv_clamp: 256
+
+
+loss_kwargs:
+    class_name: encoder_inversion.w_loss.WLoss
+    r1_gamma: 1
+    loss_weight:
+        l1: 1.0
+        lpips: 0.5
+        id: 0.25
+        w_l1: 0.
+        w_regular: 0.
+        w_delta: 0.001
+        w_discriminator: 1.0
+        multiview_id: 0.25
+        multiview_cx: 0.0
+        adv: 0.
+        raw_l1: 1.0
+        tri: 0.001
+        lr_lpips: 1.0
+    loss_path:
+        path_ir_se50: pretrained_models/model_ir_se50.pth
+
+
+G_opt_kwargs:
+    class_name: torch.optim.Adam
+    module: encoder
+    betas: [0.5, 0.999]
+    eps: 1.0e-08
+    lr: 0.00004
+
+D_opt_kwargs: 
+    class_name: torch.optim.Adam
+    betas: [0, 0.99]
+    eps: 1.0e-08
+    lr: 0.0001
+
+
