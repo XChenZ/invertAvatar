@@ -1,4 +1,4 @@
-## (Under Contruction) InvertAvatar: Incremental GAN Inversion for Generalized Head Avatars
+## InvertAvatar: Incremental GAN Inversion for Generalized Head Avatars
 
 ![Teaser image](./assets/teaser.png)
 
