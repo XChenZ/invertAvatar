@@ -1,12 +1,12 @@
-#CUDA_VISIBLE_DEVICES=0 python eval_updated_os.py \
-#--outdir out/os \
-#--reload_modules True \
-#--network pretrained_model/updatedOSInvertAvatar.pkl
+CUDA_VISIBLE_DEVICES=0 python eval_updated_os.py \
+--outdir out/os \
+--reload_modules True \
+--network pretrained_model/updatedOSInvertAvatar.pkl
 
-#CUDA_VISIBLE_DEVICES=0 python eval_seq.py \
-#--outdir out/fs \
-#--reload_modules True \
-#--network pretrained_model/FSInvertAvatar.pkl
+CUDA_VISIBLE_DEVICES=0 python eval_seq.py \
+--outdir out/fs \
+--reload_modules True \
+--network pretrained_model/FSInvertAvatar.pkl
 
 CUDA_VISIBLE_DEVICES=0 python reenact_avatar_next3d.py \
 --drive_root ./data/tgt_data/dataset/images512x512 \
