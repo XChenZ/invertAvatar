@@ -14,10 +14,11 @@ import re
 from typing import List, Optional, Tuple, Union
 from torch_utils import misc
 from training_avatar_texture.camera_utils import LookAtPoseSampler, FOV_to_intrinsics
-from FaceVerse.renderer import Faceverse_manager
+from data_preprocess.FaceVerse.renderer import Faceverse_manager
 from torch.utils.data import DataLoader
 from training_avatar_texture.triplane_v20 import TriPlaneGenerator
 from torch.utils.data import Dataset
+
 
 class ImagesDataset(Dataset):
     def __init__(self, source_root, label_path, mesh_path=None, gtlabel_path=None, source_transform=None, resolution=(512, 512), skip=1,
@@ -141,11 +142,9 @@ def layout_grid(img, grid_w=None, grid_h=1, float_to_uint8=True, chw_to_hwc=True
 @click.option('--trunc', 'truncation_psi', type=float, help='Truncation psi', default=1, show_default=True)
 @click.option('--trunc-cutoff', 'truncation_cutoff', type=int, help='Truncation cutoff', default=14, show_default=True)
 @click.option('--reload_modules', help='Overload persistent modules?', type=bool, required=False, metavar='BOOL', default=True, show_default=True)
-@click.option('--lms_cond', help='If condition 2d landmarks?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
 @click.option('--fixed_camera', help='If fix camera poses?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
-@click.option('--num_frames', help='number of testing frames', type=int, required=False, metavar='BOOL', default=500, show_default=True)
 def run_video_animation(drive_root, fname, network_pkl, grid_dims, seeds, outdir, fov_deg, truncation_psi, truncation_cutoff, reload_modules,
-                        lms_cond, fixed_camera, num_frames):
+                        fixed_camera):
     grid_w = grid_dims[0]
     grid_h = grid_dims[1]
     mp4 = os.path.join(outdir, fname+'.mp4')
@@ -162,8 +161,6 @@ def run_video_animation(drive_root, fname, network_pkl, grid_dims, seeds, outdir
         G_new.rendering_kwargs = G.rendering_kwargs
         G = G_new
 
-    # total = sum([param.nelement() for param in G.parameters()])
-    # print('Number of parameter: % .4fM' % (total / 1024 / 1024))
 
     os.makedirs(outdir, exist_ok=True)
     intrinsics = FOV_to_intrinsics(fov_deg, device=device)
@@ -180,58 +177,6 @@ def run_video_animation(drive_root, fname, network_pkl, grid_dims, seeds, outdir
         w = G.mapping(z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
         ws.append(w)
 
-    with open(os.path.join(drive_root, 'dataset.json'), 'rb') as f:
-        label_list = json.load(f)['labels']
-
-    # img_list = sorted(glob.glob(drive_root + '/*.png'))
-    # vert_root = lms_root = drive_root
-    # for k, img_path in tqdm(enumerate([img for img in img_list])):
-    #     if k > num_frames:
-    #         break
-    #     if k < 1:
-    #         continue
-    #
-    #     img_path = img_list[k]
-    #     img_render = Image.open(img_path)
-    #     target_img = np.array(img_render.crop((0, 0, 512, 512)))
-    #     target_img = torch.tensor(target_img.transpose(2, 0, 1)).float().unsqueeze(0).to(device)
-    #     target_img = target_img / 127.5 - 1.
-    #
-    #     img_id = os.path.basename(img_path).split('.')[0]
-    #     vert_path = vert_root + f'/{img_id}.obj'
-    #     v = []
-    #     with open(vert_path, "r") as f:
-    #         while True:
-    #             line = f.readline()
-    #             if line == "":
-    #                 break
-    #             if line[:2] == "v ":
-    #                 v.append([float(x) for x in line.split()[1:]])
-    #     v = np.array(v).reshape((-1, 3))
-    #     v = torch.from_numpy(v).cuda().float().unsqueeze(0)
-    #
-    #     if lms_cond:
-    #         lms_path = lms_root + f'/{img_id}_kpt2d.txt'
-    #         lms = np.loadtxt(lms_path)
-    #         lms = torch.from_numpy(lms).cuda().float().unsqueeze(0)
-    #         v = torch.cat((v, lms), 1)
-    #
-    #     imgs = [target_img[0]]
-    #     for idx, seed in enumerate(seeds):
-    #         w = ws[idx]
-    #         camera_params = (np.array(label_list[k - 1][1]) + np.array(label_list[k][1]) + np.array(
-    #             label_list[k + 1][1])) / 3  # add camera smoothness
-    #         camera_params = torch.tensor(camera_params).unsqueeze(0).float().to(device)
-    #         if fixed_camera:
-    #             camera_params = conditioning_params
-    #         G.rendering_kwargs['return_normal'] = False
-    #         img = G.synthesis(w, camera_params, v, noise_mode='const')['image'][0]
-    #         imgs.append(img)
-    #
-    #     video_out.append_data(layout_grid(torch.stack(imgs), grid_w=grid_w, grid_h=grid_h))
-    #
-    # video_out.close()
-
     label_path = os.path.join(drive_root, 'dataset_realcam.json')
 
     mesh_path = os.path.join(os.path.dirname(drive_root), 'orthRender256x256_face_eye')
@@ -239,8 +184,7 @@ def run_video_animation(drive_root, fname, network_pkl, grid_dims, seeds, outdir
                             source_transform=transforms.Compose([
                                 transforms.ToTensor(),
                                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])]), return_vert=True,
-                            skip=1, idx_range=('zyf_1811', 110, 610),
-                            fvcoeffs_path=os.path.join(os.path.dirname(drive_root), 'coeffs_smooth'))
+                            fvcoeffs_path=os.path.join(os.path.dirname(drive_root), 'coeffs'))
 
     print(mesh_path)
     faceverser = Faceverse_manager(device=device, base_coeff=None)
@@ -248,6 +192,7 @@ def run_video_animation(drive_root, fname, network_pkl, grid_dims, seeds, outdir
     count = 0
     bar = tqdm(enumerate(dataloader))
     for k, fetch_data in bar:
+        if k > 50: break
         image = fetch_data[0]
         label = fetch_data[1]
         vert = fetch_data[2]

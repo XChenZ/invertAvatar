@@ -18,8 +18,8 @@ import cv2
 import torchvision
 from torch_utils import persistence
 from training_avatar_texture.networks_stylegan2_new import Generator as StyleGAN2Backbone_cond
-from training_avatar_texture.volumetric_rendering.renderer import ImportanceRenderer, ImportanceRenderer_new
-from training_avatar_texture.volumetric_rendering.ray_sampler import RaySampler, RaySampler_new
+from training_avatar_texture.volumetric_rendering.renderer import ImportanceRenderer, ImportanceRenderer_bsMotion
+from training_avatar_texture.volumetric_rendering.ray_sampler import RaySampler, RaySampler_zxc
 import dnnlib
 from training_avatar_texture.volumetric_rendering.renderer import fill_mouth
 
@@ -45,8 +45,8 @@ class TriPlaneGenerator(torch.nn.Module):
         self.w_dim = w_dim
         self.img_resolution = img_resolution
         self.img_channels = img_channels
-        self.renderer = ImportanceRenderer_new()
-        self.ray_sampler = RaySampler_new()
+        self.renderer = ImportanceRenderer_bsMotion()
+        self.ray_sampler = RaySampler_zxc()
         self.texture_backbone = StyleGAN2Backbone_cond(z_dim, c_dim, w_dim, img_resolution=256, img_channels=32, mapping_kwargs=mapping_kwargs,
                                                   **synthesis_kwargs)  # render neural texture
         self.face_backbone = StyleGAN2Backbone_cond(z_dim, c_dim, w_dim, img_resolution=256, img_channels=32, mapping_kwargs=mapping_kwargs,

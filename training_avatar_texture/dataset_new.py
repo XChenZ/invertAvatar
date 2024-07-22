@@ -18,12 +18,14 @@ import PIL.Image
 import json
 import torch
 import dnnlib
+import cv2
 
 try:
     import pyspng
 except ImportError:
     pyspng = None
 
+mouth_idx = list(range(22, 52))
 class Dataset(torch.utils.data.Dataset):
     def __init__(self,
         name,                   # Name of the dataset.
@@ -32,6 +34,7 @@ class Dataset(torch.utils.data.Dataset):
         use_labels  = True,    # Enable conditioning labels? False = label dimension is zero.
         xflip       = False,    # Artificially double the size of the dataset via x-flips. Applied after max_size.
         load_obj    = True,
+        return_name = False,
         random_seed = 0,        # Random seed to use when applying max_size.
     ):
         self._name = name
@@ -40,6 +43,7 @@ class Dataset(torch.utils.data.Dataset):
         self._raw_labels = None
         self._label_shape = None
         self.load_obj = load_obj
+        self.return_name = return_name
 
         # Apply max_size.
         self._raw_idx = np.arange(self._raw_shape[0], dtype=np.int64)
@@ -96,7 +100,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         image = self._load_raw_image(self._raw_idx[idx], resolution=self.resolution)
-        assert isinstance(image, np.ndarray)
+        # assert isinstance(image, np.ndarray)
         # assert list(image.shape) == self.image_shape
         # assert image.dtype == np.uint8
         if self._xflip[idx]:
@@ -104,7 +108,10 @@ class Dataset(torch.utils.data.Dataset):
             image = image[:, :, ::-1]
         label_cam = self.get_label(idx)
         mesh_cond = self.get_vert(self._raw_idx[idx])
-        return image.copy(), label_cam, mesh_cond
+        if self.return_name:
+            return self._image_fnames[self._raw_idx[idx]], image.copy(), label_cam, mesh_cond
+        else:
+            return image.copy(), label_cam, mesh_cond
 
     def load_random_data(self):
         gen_cond_sample_idx = [np.random.randint(self.__len__()) for _ in range(self.random_sample_num)]
@@ -195,34 +202,46 @@ class ImageFolderDataset(Dataset):
         resolution      = None, # Ensure specific resolution, None = highest available.
         load_exp        = False,
         load_lms_counter= False,
+        load_uv         = False,
         load_bg         = False,
+        label_file      = 'dataset.json',
+        fvcoeffs_path   = None,
         **super_kwargs,         # Additional arguments for the Dataset base class.
     ):
         self._path = path
         self._mesh_path = mesh_path
         self.mesh_type = mesh_type
         self._zipfile = None
-        self.load_exp = load_exp
+        # self.load_exp = load_exp
         self.load_lms_counter = load_lms_counter
         self.load_bg = load_bg
-        self.label_file = 'dataset.json'#'dataset_fv_simple.json'
+        self.load_uv = load_uv
+        self.load_coeff = fvcoeffs_path is not None
+        self.label_file = label_file
         self._type = 'dir'
         self._condImg_path = path.replace('images512x512', 'lms_counter512x512_newF') if self.load_lms_counter else None
         self._bg_path = path.replace('images512x512', 'fgmasks512x512') if self.load_bg else None
+        self._uv_path = path.replace('images512x512', 'uvRender256x256') if self.load_uv else None
+        self._coeff_path = fvcoeffs_path
+
+        if self.load_uv:
+            self.uvmask = cv2.imread('data_preprocess/FaceVerse/v3/dense_uv_expanded_mask_onlyFace.png', 0).astype(np.float32)/255
 
         PIL.Image.init()
-        self._image_fnames = list(dict(json.loads(open(os.path.join(self._path, 'dataset_realcam.json')).read())['labels']).keys())
+
+        real_cam_json = os.path.join(self._path, 'dataset_realcam.json')
+        self._image_fnames = list(dict(json.loads(open(real_cam_json).read())['labels']).keys())
 
         self._uv_fnames = [fname.split('.')[0]+'.npy' for fname in self._image_fnames]
         if len(self._image_fnames) == 0 or len(self._uv_fnames) == 0:
             raise IOError('No image files found in the specified path')
-        self._raw_cams = self._load_raw_label(os.path.join(self._path, 'dataset_realcam.json'), 'labels')
-        self._wcode_path = path.replace('images512x512', 'inversion_wplus')
+        # self._raw_mouth_masks = self._load_raw_label(os.path.join(self._mesh_path, 'mouth_masks.json'))
+        self._raw_cams = self._load_raw_label(real_cam_json, 'labels')
 
         name = os.path.splitext(os.path.basename(self._path))[0]
-        raw_shape = [len(self._image_fnames)] + [3,] + list(self._load_raw_image(0, resolution).shape[-2:])
-        if resolution is not None and (raw_shape[2] != resolution or raw_shape[3] != resolution):
-            raise IOError('Image files do not match the specified resolution')
+        raw_shape = [len(self._image_fnames)] + [3, resolution, resolution]
+        # if resolution is not None and (raw_shape[2] != resolution or raw_shape[3] != resolution):
+        #     raise IOError('Image files do not match the specified resolution')
         super().__init__(name=name, raw_shape=raw_shape, **super_kwargs)
 
     @staticmethod
@@ -282,14 +301,20 @@ class ImageFolderDataset(Dataset):
     def _load_raw_image(self, raw_idx, resolution=None):
         fname = self._image_fnames[raw_idx]
         image = self._load_raw_image_core(fname, resolution=resolution) # [C, H, W]
-        if self._condImg_path is not None:
+        if self.load_lms_counter:
             cond_image = self._load_raw_image_core(fname, path=self._condImg_path, resolution=resolution)
             image = np.concatenate([image, cond_image], axis=0)
-        if self._bg_path is not None:
+        if self.load_bg:
             cond_image = self._load_raw_image_core(fname, path=self._bg_path, resolution=resolution)[:1]    # TODO:最好把数据处理一遍确保是单通道的0-255
             cond_image[cond_image>127] = 255
             cond_image[cond_image<128] = 127.5
             image = np.concatenate([image, cond_image], axis=0)
+        if self.load_uv:
+            uvppverts_image = np.load(os.path.join(self._uv_path, fname.replace('png', 'npy'))).astype(np.float32)
+            uvppverts_image[..., -1] *= self.uvmask
+            uvgttex_image = np.array(PIL.Image.open(open(os.path.join(self._uv_path, fname.split('.')[0]+'_uvgttex.png'), 'rb'))).astype(np.float32) / 127.5 - 1
+            # image = {'image': image, 'uv_gttex': uvgttex_image.transpose(2, 0, 1), 'uv_pverts': uvppverts_image.transpose(2, 0, 1)}  # HWC => CHW
+            image = {'image': image, 'uv': np.concatenate([uvgttex_image, uvppverts_image], axis=-1).transpose(2, 0, 1)}
         return image
 
     def _load_raw_labels(self):
@@ -302,8 +327,11 @@ class ImageFolderDataset(Dataset):
         uvcoords_image[..., -1][uvcoords_image[..., -1] < 0.5] = 0
         uvcoords_image[..., -1][uvcoords_image[..., -1] >= 0.5] = 1
         # # uvcoords_image = uvcoords_image.transpose(2, 0, 1)  # HW3 => 3HW
+        # m_mask = self._raw_mouth_masks[raw_idx].astype(np.int)
         m_mask = np.asarray([0, 0, 1, 1], dtype=np.int32)  ####tmp
-        return {'uvcoords_image': uvcoords_image.copy(), 'mouths_mask': m_mask}
+        out = {'uvcoords_image': uvcoords_image.copy(), 'mouths_mask': m_mask}
+        if self.load_coeff: out['coeff'] = np.load(os.path.join(self._coeff_path, fname)).astype(np.float32)
+        return out
 
     def get_label(self, idx):
         label = self._get_raw_labels()[self._raw_idx[idx]]
@@ -322,7 +350,19 @@ class ImageFolderDataset(Dataset):
         cond_image = self._load_raw_image_core(fname, path=self._condImg_path, resolution=resolution)
         return cond_image
 
-    def get_Wcode(self, idx):
+    def get_bgImg(self, idx, resolution=None):
+        assert self._bg_path is not None
         fname = self._image_fnames[self._raw_idx[idx]]
-        w_code = np.load(os.path.join(self._wcode_path, fname.replace('png', 'npy')))
-        return w_code
+        cond_image = self._load_raw_image_core(fname, path=self._bg_path, resolution=resolution)[:1]  # TODO:最好把数据处理一遍确保是单通道的0-255
+        cond_image[cond_image > 127] = 255
+        cond_image[cond_image < 128] = 127.5
+        return cond_image
+
+    def get_uvImg(self, idx):
+        assert self._uv_path is not None
+        fname = self._image_fnames[idx]
+        uvppverts_image = np.load(os.path.join(self._uv_path, fname.replace('.png', '.npy'))).astype(np.float32)
+        uvppverts_image[..., -1] *= self.uvmask
+        uvgttex_image = np.array(PIL.Image.open(open(os.path.join(self._uv_path, fname.split('.')[0] + '_uvgttex.png'), 'rb'))).astype(np.float32) / 127.5 - 1
+        uv_image = np.concatenate([uvgttex_image, uvppverts_image], axis=-1).transpose(2, 0, 1)  # HWC => CHW
+        return uv_image

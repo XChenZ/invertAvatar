@@ -414,7 +414,7 @@ class SynthesisBlock(torch.nn.Module):
             self.skip = Conv2dLayer(in_channels, out_channels, kernel_size=1, bias=False, up=2,
                 resample_filter=resample_filter, channels_last=self.channels_last)
 
-    def forward(self, x, img, ws, force_fp32=False, fused_modconv=None, update_emas=False, **layer_kwargs):
+    def forward(self, x, img, ws, condition=None, force_fp32=False, fused_modconv=None, update_emas=False, **layer_kwargs):
         _ = update_emas # unused
         misc.assert_shape(ws, [None, self.num_conv + self.num_torgb, self.w_dim])
         w_iter = iter(ws.unbind(dim=1))
@@ -445,12 +445,18 @@ class SynthesisBlock(torch.nn.Module):
             x = y.add_(x)
         else:
             x = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
+            if condition is not None:
+                # CS-SFT
+                x_same, x_sft = torch.split(x, int(x.size(1) // 2), dim=1)
+                x_sft = x_sft * condition[0] + condition[1]
+                x = torch.cat([x_same, x_sft], dim=1)
             x = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
 
         # ToRGB.
         if img is not None:
             misc.assert_shape(img, [None, self.img_channels, self.resolution // 2, self.resolution // 2])
             img = upfirdn2d.upsample2d(img, self.resample_filter)
+
         if self.is_last or self.architecture == 'skip':
             y = self.torgb(x, next(w_iter), fused_modconv=fused_modconv)
             y = y.to(dtype=torch.float32, memory_format=torch.contiguous_format)
@@ -500,7 +506,8 @@ class SynthesisNetwork(torch.nn.Module):
                 self.num_ws += block.num_torgb
             setattr(self, f'b{res}', block)
 
-    def forward(self, ws, cond_list, return_list, **block_kwargs):
+    def forward(self, ws, cond_list, return_list, feat_conditions=None, return_imgs=False, out_res=(32, 256), **block_kwargs):
+        assert not(return_list and return_imgs)
         block_ws = []
         with torch.autograd.profiler.record_function('split_ws'):
             misc.assert_shape(ws, [None, self.num_ws, self.w_dim])
@@ -512,29 +519,31 @@ class SynthesisNetwork(torch.nn.Module):
                 w_idx += block.num_conv
 
         x = img = None
-        x_list, _index = [], 0
-        start_layer = 3 #从32分辨率开始
-        if cond_list is not None:
-            assert len(cond_list) - 2 + start_layer == len(block_ws)
+        x_list, _index, out_imgs = [], 0, []
+        start_layer = int(np.log2(out_res[0])) - 2  # start from res 32
+        end_layer = (self.img_resolution_log2 - 2) if len(out_res) == 1 else (int(np.log2(out_res[1])) - 2)
         for res, cur_ws in zip(self.block_resolutions, block_ws):
             block = getattr(self, f'b{res}')
-            x, img = block(x, img, cur_ws, **block_kwargs)
+            condition_feat = feat_conditions[res] if (feat_conditions is not None and res in feat_conditions.keys()) else None
+            x, img = block(x, img, cur_ws, condition_feat, **block_kwargs)
             if _index >= start_layer:
                 if return_list:
                     if _index == start_layer: x_list.append(img.clone())
                     x_list.append(x.clone())
+                    if return_imgs:
+                        if _index == start_layer: out_imgs.append(x)
+                        out_imgs.append(img)
                 if cond_list is not None:
                     if _index == start_layer: img = cond_list[0][:, :-1] * cond_list[0][:, -1:] + img * (1 - cond_list[0][:, -1:])  # 面部直接复制
-                    cond_img, alpha_image = cond_list[1 + _index - start_layer][:, :-1], cond_list[1 + _index - start_layer][:, -1:]
-                    x = cond_img * alpha_image + x * (1 - alpha_image)  # 面部直接复制
+                    if _index < end_layer:  # clone face region
+                        cond_img, alpha_image = cond_list[1 + _index - start_layer][:, :-1], cond_list[1 + _index - start_layer][:, -1:]
+                        x = cond_img * alpha_image + x * (1 - alpha_image)
             _index += 1
-
-        # if cond_list is not None:
-        #     cond_img, alpha_image = cond_list[-1][:, :-1], cond_list[-1][:, -1:]
-        #     img = cond_img * alpha_image + img * (1 - alpha_image)  # 面部直接复制
         if return_list:
             x_list.append(img)
             return x_list
+        elif return_imgs:
+            return out_imgs
         else:
             return img
 

@@ -5,7 +5,7 @@ I_kwargs:
     use_gru: True
     use_msfeat: True
     path_kwargs:
-        path_generator: training-runs/v20_pgtraining_wolmsCond/00005-ffhq-images512x512-gpus6-batch24-gamma8/network-snapshot-001362.pkl
+        path_generator: pretrained_model/ani3dgan512.pkl
         path_irse50: pretrained_models/model_ir_se50.pth
         path_triplanenet: pretrained_models/triplanenet_final.pth
 

@@ -8,16 +8,15 @@ from torch_utils import misc
 import dnnlib
 import legacy
 from encoder_inversion.models.e4e import Encoder4Editing
-from encoder_inversion.models.unet_encoders import TriPlane_Encoder_withGRU
+from encoder_inversion.models.unet_encoders import TriPlaneSFTfeat_Encoder, TriPlanefeat_Encoder
 from encoder_inversion.models.networks_styleunet import CondSynthesisNetwork_withGRU
 
 
 class unet_encoder(nn.Module):
     def __init__(self, encoding_texture=False, encoding_triplane=False):
         super(unet_encoder, self).__init__()
-        self.texture_unet = CondSynthesisNetwork_withGRU(cond_channels=4 + 3, in_size=256, final_size=4, img_channels=32, img_resolution=256,
-                                                         num_cond_res=256) if encoding_texture else None
-        self.triplane_unet = TriPlane_Encoder_withGRU(inp_ch=6, res=256) if encoding_triplane else None
+        self.texture_unet = TriPlanefeat_Encoder(inp_ch=7, res=256, use_gru=True) if encoding_texture else None
+        self.triplane_unet = TriPlaneSFTfeat_Encoder(inp_ch=6, res=256, use_gru=True) if encoding_triplane else None
 
     def forward(self, x):
         raise NotImplementedError

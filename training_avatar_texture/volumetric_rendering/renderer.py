@@ -292,7 +292,7 @@ class ImportanceRenderer(torch.nn.Module):
         samples = bins_g[...,0] + (u-cdf_g[...,0])/denom * (bins_g[...,1]-bins_g[...,0])
         return samples
 
-class ImportanceRenderer_new(torch.nn.Module):
+class ImportanceRenderer_bsMotion(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.ray_marcher = MipRayMarcher2()

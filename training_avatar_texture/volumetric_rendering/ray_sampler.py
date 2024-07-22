@@ -62,7 +62,7 @@ class RaySampler(torch.nn.Module):
 
         return ray_origins, ray_dirs
 
-class RaySampler_new(torch.nn.Module):
+class RaySampler_zxc(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.ray_origins_h, self.ray_directions, self.depths, self.image_coords, self.rendering_options = None, None, None, None, None
